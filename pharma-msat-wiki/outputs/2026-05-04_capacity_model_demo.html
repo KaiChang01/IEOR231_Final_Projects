@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pharma Capacity Model — Demo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    padding: 32px 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 32px; }
+  .wiki-link { color: #3b82f6; font-size: 0.8rem; text-decoration: none; }
+  .wiki-link:hover { text-decoration: underline; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .grid-full { margin-bottom: 24px; }
+
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e2e8f0;
+  }
+  .card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: #0f172a; }
+  .card .desc { font-size: 0.78rem; color: #94a3b8; margin-bottom: 16px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .kpi {
+    background: white;
+    border-radius: 10px;
+    padding: 16px 20px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .kpi .label { font-size: 0.75rem; color: #64748b; margin-bottom: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .value { font-size: 1.6rem; font-weight: 700; }
+  .kpi .sublabel { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
+  .kpi.red .value { color: #dc2626; }
+  .kpi.amber .value { color: #d97706; }
+  .kpi.green .value { color: #16a34a; }
+  .kpi.blue .value { color: #2563eb; }
+
+  .bottleneck-badge {
+    display: inline-block;
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .gantt-wrap { overflow-x: auto; }
+  .gantt { border-collapse: collapse; width: 100%; min-width: 700px; font-size: 0.8rem; }
+  .gantt th { background: #f1f5f9; color: #475569; font-weight: 600; padding: 6px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+  .gantt td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .gantt td:first-child { font-weight: 500; color: #334155; white-space: nowrap; }
+  .bar-cell { padding: 4px 0 !important; }
+  .bar-outer { background: #f1f5f9; border-radius: 4px; height: 22px; position: relative; }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: width 0.6s ease;
+  }
+  .bar-fill.bottleneck { background: linear-gradient(90deg, #dc2626, #ef4444); }
+  .bar-fill.high     { background: linear-gradient(90deg, #d97706, #f59e0b); }
+  .bar-fill.med      { background: linear-gradient(90deg, #2563eb, #3b82f6); }
+  .bar-fill.low      { background: linear-gradient(90deg, #16a34a, #22c55e); }
+
+  .legend { display: flex; gap: 16px; font-size: 0.75rem; color: #64748b; margin-top: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  .insight-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.82rem;
+    color: #92400e;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+  .insight-box strong { color: #78350f; }
+
+  canvas { max-height: 260px; }
+
+  .controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .controls label { font-size: 0.8rem; color: #475569; font-weight: 500; }
+  .controls input[type=range] { width: 120px; accent-color: #3b82f6; }
+  .controls span { font-size: 0.8rem; color: #2563eb; font-weight: 600; min-width: 36px; }
+</style>
+</head>
+<body>
+
+<h1>Production Capacity Model <span style="font-weight:400;color:#64748b;">— Biologic Drug Substance (Example)</span></h1>
+<p class="subtitle">
+  Interactive demo · Linked to
+  <a class="wiki-link" href="../wiki/scheduling/capacity_modeling.md">scheduling/capacity_modeling.md</a> ·
+  <a class="wiki-link" href="../wiki/scheduling/campaign_planning.md">campaign_planning.md</a>
+</p>
+
+<!-- KPI row -->
+<div class="kpi-row">
+  <div class="kpi blue">
+    <div class="label">Design Capacity</div>
+    <div class="value" id="kpi-design">52</div>
+    <div class="sublabel">batches / year (theoretical)</div>
+  </div>
+  <div class="kpi amber">
+    <div class="label">Effective Capacity</div>
+    <div class="value" id="kpi-effective">38</div>
+    <div class="sublabel">after planned downtime</div>
+  </div>
+  <div class="kpi red">
+    <div class="label">Actual Throughput</div>
+    <div class="value" id="kpi-actual">29</div>
+    <div class="sublabel">after deviations & failures</div>
+  </div>
+  <div class="kpi green">
+    <div class="label">OEE</div>
+    <div class="value" id="kpi-oee">56%</div>
+    <div class="sublabel">Avail × Perf × Quality</div>
+  </div>
+</div>
+
+<!-- Row 1: waterfall + OEE breakdown -->
+<div class="grid">
+  <div class="card">
+    <h2>Capacity Waterfall</h2>
+    <div class="desc">How design capacity erodes to actual throughput — each bar shows the loss category</div>
+    <canvas id="waterfallChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>OEE Component Breakdown</h2>
+    <div class="desc">Overall Equipment Effectiveness = Availability × Performance × Quality</div>
+    <canvas id="oeeChart"></canvas>
+    <div class="insight-box">
+      <strong>Reading this:</strong> Each ring shows one OEE component. Multiply the three percentages together to get OEE. A world-class facility targets ~85% OEE; pharma typically runs 50–70% due to GMP cleaning, qualification, and biological variability.
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: equipment utilization -->
+<div class="card grid-full">
+  <h2>Equipment Utilization by Process Step <span class="bottleneck-badge">Bottleneck highlighted</span></h2>
+  <div class="desc">% of available time each piece of equipment is occupied. The highest bar is the scheduling bottleneck — adding capacity anywhere else won't increase total output.</div>
+
+  <div class="gantt-wrap" style="margin-top:8px;">
+    <table class="gantt">
+      <thead>
+        <tr>
+          <th style="width:200px">Unit Operation</th>
+          <th>Utilization</th>
+          <th style="width:60px">%</th>
+          <th style="width:120px">Status</th>
+        </tr>
+      </thead>
+      <tbody id="utilizationTable"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div> Bottleneck (>90%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> High risk (75–90%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div> Moderate (50–75%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Headroom (<50%)</div>
+  </div>
+</div>
+
+<!-- Row 3: campaign Gantt simulator -->
+<div class="card grid-full">
+  <h2>Campaign Schedule Simulator</h2>
+  <div class="desc">Adjust campaign size to see how total schedule length and cleaning overhead change. Relates to <a class="wiki-link" href="../wiki/scheduling/campaign_planning.md">campaign_planning.md</a></div>
+
+  <div class="controls" style="margin-top:12px;">
+    <label>Campaign size (batches):</label>
+    <input type="range" id="campaignSize" min="2" max="10" value="4" step="1"
+           oninput="updateGantt(this.value)">
+    <span id="campaignSizeVal">4</span>
+    <label style="margin-left:16px;">Number of campaigns / year:</label>
+    <input type="range" id="numCampaigns" min="2" max="6" value="3" step="1"
+           oninput="updateGantt()">
+    <span id="numCampaignsVal">3</span>
+  </div>
+
+  <canvas id="ganttChart" style="max-height:200px;"></canvas>
+
+  <div class="insight-box" id="ganttInsight"></div>
+</div>
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+const steps = [
+  { name: "Seed Train / Inoculum",  util: 47, cycleDays: 7  },
+  { name: "Production Bioreactor",  util: 93, cycleDays: 18 },   // BOTTLENECK
+  { name: "Harvest / Clarification",util: 61, cycleDays: 2  },
+  { name: "Capture Chromatography", util: 78, cycleDays: 1.5},
+  { name: "Virus Inactivation",     util: 55, cycleDays: 0.5},
+  { name: "Ion Exchange Chrom.",    util: 68, cycleDays: 1  },
+  { name: "Virus Filtration",       util: 52, cycleDays: 0.5},
+  { name: "UF/DF",                  util: 63, cycleDays: 1  },
+  { name: "Drug Substance Fill",    util: 44, cycleDays: 1  },
+];
+
+const BATCH_DAYS = 28;   // total days per batch (sum of critical path)
+const CLEAN_DAYS = 5;    // cleaning / changeover days between campaigns
+
+// ── WATERFALL CHART ──────────────────────────────────────────────────────────
+(function() {
+  const design    = 52;
+  const lostMaint = 8;   // scheduled maintenance, calibration
+  const lostClean = 6;   // cleaning / changeover
+  const effective = design - lostMaint - lostClean;   // 38
+  const lostFail  = 5;   // batch failures
+  const lostDev   = 4;   // deviations / extended investigations
+  const actual    = effective - lostFail - lostDev;   // 29
+
+  const ctx = document.getElementById('waterfallChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Design\nCapacity', '− Maintenance\n& Calibration', '− Cleaning &\nChangeover', 'Effective\nCapacity', '− Batch\nFailures', '− Deviations &\nInvestigations', 'Actual\nThroughput'],
+      datasets: [
+        {
+          label: 'Value',
+          data: [design, null, null, effective, null, null, actual],
+          backgroundColor: ['#3b82f6', 'transparent', 'transparent', '#d97706', 'transparent', 'transparent', '#16a34a'],
+          borderRadius: 4,
+        },
+        {
+          label: 'Loss',
+          data: [null, lostMaint, lostClean, null, lostFail, lostDev, null],
+          backgroundColor: ['transparent', '#fca5a5', '#fca5a5', 'transparent', '#fca5a5', '#fca5a5', 'transparent'],
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.raw !== null ? ` ${ctx.raw} batches/year` : ''
+          }
+        }
+      },
+      scales: {
+        x: { stacked: false, grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: {
+          beginAtZero: true, max: 60,
+          title: { display: true, text: 'Batches / year', font: { size: 11 } },
+          grid: { color: '#f1f5f9' }
+        }
+      }
+    }
+  });
+})();
+
+// ── OEE DOUGHNUT CHART ───────────────────────────────────────────────────────
+(function() {
+  const avail = 78, perf = 85, qual = 85;
+  const oee = Math.round(avail * perf * qual / 10000);
+  const ctx = document.getElementById('oeeChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: [
+        `Availability ${avail}%`, `Avail. gap ${100-avail}%`,
+        `Performance ${perf}%`,  `Perf. gap ${100-perf}%`,
+        `Quality ${qual}%`,      `Quality gap ${100-qual}%`
+      ],
+      datasets: [
+        { data: [avail, 100-avail], backgroundColor: ['#2563eb','#dbeafe'], cutout: '80%', circumference: 220, rotation: -110 },
+        { data: [perf,  100-perf],  backgroundColor: ['#d97706','#fef3c7'], cutout: '65%', circumference: 220, rotation: -110 },
+        { data: [qual,  100-qual],  backgroundColor: ['#16a34a','#dcfce7'], cutout: '50%', circumference: 220, rotation: -110 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { font: { size: 10 }, boxWidth: 12, padding: 8,
+            filter: (item) => !item.text.includes('gap') }
+        },
+        tooltip: {
+          callbacks: { label: (ctx) => ` ${ctx.label}` }
+        }
+      }
+    }
+  });
+
+  document.getElementById('kpi-oee').textContent = oee + '%';
+})();
+
+// ── UTILIZATION TABLE ────────────────────────────────────────────────────────
+(function() {
+  const tbody = document.getElementById('utilizationTable');
+  steps.forEach(s => {
+    const cls   = s.util >= 90 ? 'bottleneck' : s.util >= 75 ? 'high' : s.util >= 50 ? 'med' : 'low';
+    const color = s.util >= 90 ? '#dc2626' : s.util >= 75 ? '#d97706' : s.util >= 50 ? '#2563eb' : '#16a34a';
+    const status = s.util >= 90 ? '⚠ Bottleneck' : s.util >= 75 ? 'High risk' : s.util >= 50 ? 'Moderate' : 'Headroom';
+    const statusColor = s.util >= 90 ? '#dc2626' : s.util >= 75 ? '#d97706' : s.util >= 50 ? '#2563eb' : '#16a34a';
+    tbody.innerHTML += `
+      <tr>
+        <td>${s.name}${s.util >= 90 ? ' <span style="font-size:0.7rem;color:#dc2626;font-weight:700">(BOTTLENECK)</span>' : ''}</td>
+        <td class="bar-cell" style="padding:6px 8px !important;">
+          <div class="bar-outer">
+            <div class="bar-fill ${cls}" style="width:${s.util}%">${s.util}%</div>
+          </div>
+        </td>
+        <td style="font-weight:700;color:${color}">${s.util}%</td>
+        <td style="font-size:0.78rem;color:${statusColor};font-weight:600">${status}</td>
+      </tr>`;
+  });
+})();
+
+// ── CAMPAIGN GANTT SIMULATOR ─────────────────────────────────────────────────
+let ganttChart = null;
+
+function updateGantt(newSize) {
+  const size = parseInt(document.getElementById('campaignSize').value);
+  const num  = parseInt(document.getElementById('numCampaigns').value);
+  document.getElementById('campaignSizeVal').textContent = size;
+  document.getElementById('numCampaignsVal').textContent = num;
+
+  const colors = ['#3b82f6','#16a34a','#d97706','#8b5cf6','#ec4899','#06b6d4'];
+  const labels = [];
+  const data   = [];
+  let   day    = 0;
+
+  for (let c = 0; c < num; c++) {
+    // campaign block
+    const campaignDays = size * BATCH_DAYS;
+    labels.push(`Campaign ${c+1} (${size} batches)`);
+    data.push({ x: [day, day + campaignDays], y: `Campaign ${c+1}`, color: colors[c % colors.length] });
+    day += campaignDays;
+
+    // cleaning block
+    if (c < num - 1) {
+      labels.push(`Cleaning ${c+1}`);
+      data.push({ x: [day, day + CLEAN_DAYS], y: `Campaign ${c+1}`, color: '#e2e8f0' });
+      day += CLEAN_DAYS;
+    }
+  }
+
+  const totalDays = day;
+  const campaignEfficiency = Math.round((num * size * BATCH_DAYS) / totalDays * 100);
+
+  document.getElementById('ganttInsight').innerHTML =
+    `<strong>Schedule summary:</strong> ${num} campaigns × ${size} batches = <strong>${num * size} total batches</strong> over <strong>${totalDays} days</strong> (${Math.round(totalDays/365*12)} months). ` +
+    `Cleaning overhead: <strong>${(num-1) * CLEAN_DAYS} days</strong> (${100 - campaignEfficiency}% of schedule). ` +
+    `Production efficiency: <strong>${campaignEfficiency}%</strong>. ` +
+    `Try reducing campaign size — notice how cleaning overhead grows as a % of schedule.`;
+
+  if (ganttChart) ganttChart.destroy();
+
+  const uniqueLabels = [...new Set(data.map(d => d.y))];
+  const ctx = document.getElementById('ganttChart').getContext('2d');
+
+  ganttChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: uniqueLabels,
+      datasets: data.map(d => ({
+        label: '',
+        data: uniqueLabels.map(l => l === d.y ? d.x[1] - d.x[0] : 0),
+        base: uniqueLabels.map(l => l === d.y ? d.x[0] : 0),
+        backgroundColor: d.color,
+        borderRadius: 3,
+        barPercentage: 0.5,
+      }))
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const base = ctx.dataset.base[ctx.dataIndex];
+              const val  = ctx.raw;
+              return val > 0 ? ` Day ${base}–${base + val}` : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          title: { display: true, text: 'Days from start', font: { size: 11 } },
+          grid: { color: '#f1f5f9' }
+        },
+        y: { stacked: true, grid: { display: false } }
+      }
+    }
+  });
+}
+
+updateGantt(4);
+</script>
+</body>
+</html>
